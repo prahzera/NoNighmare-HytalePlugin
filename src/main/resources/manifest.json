@@ -1,0 +1,6 @@
+{
+  "Group": "net.hapore",
+  "Name": "NoNightmare",
+  "Version": "1.0.0",
+  "Main": "net.hapore.NoNightmarePlugin"
+}
