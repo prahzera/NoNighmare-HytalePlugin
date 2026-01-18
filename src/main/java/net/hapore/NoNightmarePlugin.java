@@ -45,7 +45,7 @@ import com.hypixel.hytale.server.core.modules.time.WorldTimeResource;
  */
 public class NoNightmarePlugin extends JavaPlugin {
 
-    private static final String PLUGIN_VERSION = "1.2.0";
+    private static final String PLUGIN_VERSION = "1.0.1";
     private static final String CONFIG_FILE_NAME = "nonightmare.json";
     private static final double DEFAULT_REQUIRED_PERCENT = 50.0;
     private static final int DEFAULT_DELAY_SECONDS = 2;
@@ -53,7 +53,6 @@ public class NoNightmarePlugin extends JavaPlugin {
     private static final int DEFAULT_NIGHT_END_HOUR = 4;
     private static final String DEFAULT_NIGHT_START_TIME = "18:00";
     private static final String DEFAULT_NIGHT_END_TIME = "04:47";
-    private static final int DEFAULT_NOT_ALLOWED_COOLDOWN_SECONDS = 5;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     private float sleepPercentageRequired = (float) (DEFAULT_REQUIRED_PERCENT / 100.0);
@@ -62,7 +61,6 @@ public class NoNightmarePlugin extends JavaPlugin {
     private int nightEndHour = DEFAULT_NIGHT_END_HOUR;
     private LocalTime nightStartTime = LocalTime.parse(DEFAULT_NIGHT_START_TIME);
     private LocalTime nightEndTime = LocalTime.parse(DEFAULT_NIGHT_END_TIME);
-    private int notAllowedCooldownSeconds = DEFAULT_NOT_ALLOWED_COOLDOWN_SECONDS;
     private String messageSleepStatusTemplate = "";
     private String messageThresholdReachedTemplate = "";
     private String messageThresholdLostTemplate = "";
@@ -73,7 +71,7 @@ public class NoNightmarePlugin extends JavaPlugin {
     private int lastSleepingPlayers = -1;
     private int lastTotalPlayers = -1;
     private long thresholdReachedAtMillis = 0L;
-    private long lastNotAllowedAtMillis = 0L;
+    private boolean sentNotAllowedWhileSleeping = false;
 
     public NoNightmarePlugin(@Nonnull JavaPluginInit init) {
         super(init);
@@ -180,11 +178,6 @@ public class NoNightmarePlugin extends JavaPlugin {
         }
         if (config.nightEndTime == null || config.nightEndTime.isBlank()) {
             config.nightEndTime = DEFAULT_NIGHT_END_TIME;
-            shouldUpdateConfig = true;
-        }
-        notAllowedCooldownSeconds = Math.max(1, config.notAllowedCooldownSeconds);
-        if (config.notAllowedCooldownSeconds != notAllowedCooldownSeconds) {
-            config.notAllowedCooldownSeconds = notAllowedCooldownSeconds;
             shouldUpdateConfig = true;
         }
 
@@ -367,6 +360,10 @@ public class NoNightmarePlugin extends JavaPlugin {
             lastCheckWasSleeping = false;
         }
 
+        if (sleepingPlayers == 0) {
+            sentNotAllowedWhileSleeping = false;
+        }
+
         if (isNight && (sleepingPlayers != lastSleepingPlayers || totalPlayers != lastTotalPlayers)) {
             sendSleepStatusMessage(world, sleepingPlayers, totalPlayers, sleepPercentage);
             lastSleepingPlayers = sleepingPlayers;
@@ -374,15 +371,12 @@ public class NoNightmarePlugin extends JavaPlugin {
         }
 
         if (!isNight && sleepingPlayers > 0) {
-            long now = System.currentTimeMillis();
-            boolean changed = sleepingPlayers != lastSleepingPlayers || totalPlayers != lastTotalPlayers;
-            boolean cooledDown = (now - lastNotAllowedAtMillis) >= (long) notAllowedCooldownSeconds * 1000L;
-            if (changed || cooledDown) {
+            if (!sentNotAllowedWhileSleeping) {
                 sendSleepNotAllowedMessage(world);
-                lastNotAllowedAtMillis = now;
-                lastSleepingPlayers = sleepingPlayers;
-                lastTotalPlayers = totalPlayers;
+                sentNotAllowedWhileSleeping = true;
             }
+            lastSleepingPlayers = sleepingPlayers;
+            lastTotalPlayers = totalPlayers;
             thresholdReachedAtMillis = 0L;
             return;
         }
@@ -436,7 +430,6 @@ public class NoNightmarePlugin extends JavaPlugin {
         public int nightEndHour = DEFAULT_NIGHT_END_HOUR;
         public String nightStartTime = DEFAULT_NIGHT_START_TIME;
         public String nightEndTime = DEFAULT_NIGHT_END_TIME;
-        public int notAllowedCooldownSeconds = DEFAULT_NOT_ALLOWED_COOLDOWN_SECONDS;
         public String messageSleepStatus = "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#E5E7EB}Durmiendo: {#22C55E}{bold}{sleeping}{/bold}{#9CA3AF}/{#E5E7EB}{total} {#9CA3AF}({#38BDF8}{bold}{percent}{/bold}%{#9CA3AF} / {#F59E0B}{bold}{required}{/bold}%{#9CA3AF})";
         public String messageThresholdReached = "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#E5E7EB}Umbral alcanzado. Amanecerá en {#F59E0B}{bold}{delay}{/bold}{#F59E0B}s";
         public String messageThresholdLost = "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#EF4444}{bold}El umbral dejó de cumplirse.{/bold}";

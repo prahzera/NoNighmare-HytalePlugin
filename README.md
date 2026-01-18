@@ -57,7 +57,6 @@ El plugin crea `nonightmare.json` en el directorio de datos del plugin.
   "nightEndHour": 4,
   "nightStartTime": "18:00",
   "nightEndTime": "04:47",
-  "notAllowedCooldownSeconds": 5,
   "messageSleepStatus": "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#E5E7EB}Durmiendo: {#22C55E}{bold}{sleeping}{/bold}{#9CA3AF}/{#E5E7EB}{total} {#9CA3AF}({#38BDF8}{bold}{percent}{/bold}%{#9CA3AF} / {#F59E0B}{bold}{required}{/bold}%{#9CA3AF})",
   "messageThresholdReached": "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#E5E7EB}Umbral alcanzado. Amanecerá en {#F59E0B}{bold}{delay}{/bold}{#F59E0B}s",
   "messageThresholdLost": "{#6B7280}[{#7C3AED}{bold}NoNightmare{/bold}{#6B7280}] {#EF4444}{bold}El umbral dejó de cumplirse.{/bold}",
@@ -95,7 +94,7 @@ Se emiten mensajes profesionales en el chat con colores:
 
 ## Versión
 
-**v1.2.0** - 18 de Enero, 2026
+**v1.0.1** - 18 de Enero, 2026
 
 ## Licencia
 
