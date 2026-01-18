@@ -105,6 +105,7 @@ public class NoNightmarePlugin extends JavaPlugin {
             t.setDaemon(true);
             return t;
         });
+        
 
         scheduler.scheduleAtFixedRate(() -> pollSleep(), 1, 1, TimeUnit.SECONDS);
 
