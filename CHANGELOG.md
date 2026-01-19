@@ -1,13 +1,11 @@
 # Changelog
 
-## 1.0.1 - 2026-01-18
+## 1.1.2 - 2026-01-18
 
-This update refines sleep behavior and makes the plugin more configurable and user-friendly.
+This update adds command control and refines player-facing sleep feedback.
 
 ### Highlights
 
-- Chat messages are fully configurable via `nonightmare.json`.
-- Night detection uses precise time ranges (including minutes).
-- Sleep feedback is cleaner: “sleep not allowed” appears once per sleep session.
-- A reload command is available with permission control.
-- README and CurseForge descriptions were refreshed.
+- New admin commands: `help`, `reload`, `setpercent`, and `setdelay`.
+- Permission-guarded settings adjustments from within the server.
+- “Sleep only at night” feedback is now sent only to the player who lies down.

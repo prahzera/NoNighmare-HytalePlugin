@@ -7,9 +7,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +28,8 @@ import com.hypixel.hytale.server.core.HytaleServer;
 import com.hypixel.hytale.server.core.command.system.CommandManager;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
+import com.hypixel.hytale.server.core.command.system.arguments.system.RequiredArg;
+import com.hypixel.hytale.server.core.command.system.arguments.types.ArgTypes;
 import com.hypixel.hytale.server.core.console.ConsoleSender;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.PlayerSetupConnectEvent;
@@ -71,7 +76,8 @@ public class NoNightmarePlugin extends JavaPlugin {
     private int lastSleepingPlayers = -1;
     private int lastTotalPlayers = -1;
     private long thresholdReachedAtMillis = 0L;
-    private boolean sentNotAllowedWhileSleeping = false;
+    private final Set<UUID> notifiedDaySleepers = new HashSet<>();
+    private long ignoreDaySleepUntilMillis = 0L;
 
     public NoNightmarePlugin(@Nonnull JavaPluginInit init) {
         super(init);
@@ -235,12 +241,7 @@ public class NoNightmarePlugin extends JavaPlugin {
         AbstractCommand root = new AbstractCommand("nonightmare", "Comandos de NoNightmare", false) {
             @Override
             protected CompletableFuture<Void> execute(CommandContext context) {
-                Message prefix = Message.join(
-                        Message.raw("[").color("#6B7280"),
-                        Message.raw("NoNightmare").color("#7C3AED").bold(true),
-                        Message.raw("] ").color("#6B7280"));
-                Message body = Message.raw("Usa /nonightmare reload").color("#E5E7EB");
-                context.sendMessage(Message.join(prefix, body));
+                sendHelp(context);
                 return CompletableFuture.completedFuture(null);
             }
         };
@@ -261,8 +262,118 @@ public class NoNightmarePlugin extends JavaPlugin {
         };
         reload.requirePermission(getBasePermission() + ".reload");
 
+        AbstractCommand setPercent = new AbstractCommand("setpercent", "Set required sleep percent", false) {
+            private final RequiredArg<Double> percentArg =
+                    withRequiredArg("percent", "Required sleep percentage (0-100)", ArgTypes.DOUBLE);
+
+            @Override
+            protected CompletableFuture<Void> execute(CommandContext context) {
+                Double value = context.get(percentArg);
+                if (value == null) {
+                    sendHelp(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+                double clamped = Math.max(0.0, Math.min(100.0, value));
+                sleepPercentageRequired = (float) (clamped / 100.0);
+                saveConfig();
+
+                Message prefix = Message.join(
+                        Message.raw("[").color("#6B7280"),
+                        Message.raw("NoNightmare").color("#7C3AED").bold(true),
+                        Message.raw("] ").color("#6B7280"));
+                Message body = Message.raw("Sleep percent set to " + String.format("%.1f", clamped) + "%.")
+                        .color("#22C55E")
+                        .bold(true);
+                context.sendMessage(Message.join(prefix, body));
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        setPercent.requirePermission(getBasePermission() + ".setpercent");
+
+        AbstractCommand setDelay = new AbstractCommand("setdelay", "Set delay before sunrise", false) {
+            private final RequiredArg<Integer> secondsArg =
+                    withRequiredArg("seconds", "Delay in seconds", ArgTypes.INTEGER);
+
+            @Override
+            protected CompletableFuture<Void> execute(CommandContext context) {
+                Integer value = context.get(secondsArg);
+                if (value == null) {
+                    sendHelp(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+                int clamped = Math.max(0, value);
+                skipDelaySeconds = clamped;
+                saveConfig();
+
+                Message prefix = Message.join(
+                        Message.raw("[").color("#6B7280"),
+                        Message.raw("NoNightmare").color("#7C3AED").bold(true),
+                        Message.raw("] ").color("#6B7280"));
+                Message body = Message.raw("Delay set to " + clamped + "s.")
+                        .color("#22C55E")
+                        .bold(true);
+                context.sendMessage(Message.join(prefix, body));
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        setDelay.requirePermission(getBasePermission() + ".setdelay");
+
+        AbstractCommand help = new AbstractCommand("help", "Show help", false) {
+            @Override
+            protected CompletableFuture<Void> execute(CommandContext context) {
+                sendHelp(context);
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+
         root.addSubCommand(reload);
+        root.addSubCommand(setPercent);
+        root.addSubCommand(setDelay);
+        root.addSubCommand(help);
         registry.registerCommand(root);
+    }
+
+    private void sendHelp(CommandContext context) {
+        Message header = Message.join(
+                Message.raw("[").color("#6B7280"),
+                Message.raw("NoNightmare").color("#7C3AED").bold(true),
+                Message.raw("] ").color("#6B7280"),
+                Message.raw("Commands").color("#E5E7EB").bold(true));
+        context.sendMessage(header);
+        context.sendMessage(Message.raw("/nonightmare help - Show this help.").color("#E5E7EB"));
+        context.sendMessage(Message.raw("/nonightmare reload - Reload the plugin configuration.").color("#E5E7EB"));
+        context.sendMessage(Message.raw("/nonightmare setpercent <0-100> - Set required sleep percentage.").color("#E5E7EB"));
+        context.sendMessage(Message.raw("/nonightmare setdelay <seconds> - Set delay before sunrise (recommend 2-3s max).")
+                .color("#E5E7EB"));
+    }
+
+    private void saveConfig() {
+        try {
+            PluginConfig config = buildCurrentConfig();
+            Path dataDir = getDataDirectory();
+            Files.createDirectories(dataDir);
+            Path configPath = dataDir.resolve(CONFIG_FILE_NAME);
+            String json = gson.toJson(config);
+            Files.writeString(configPath, json, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            getLogger().at(Level.WARNING).log("No se pudo guardar la config: " + e.getMessage());
+        }
+    }
+
+    private PluginConfig buildCurrentConfig() {
+        PluginConfig config = new PluginConfig();
+        config.requiredSleepPercent = sleepPercentageRequired * 100.0;
+        config.skipDelaySeconds = skipDelaySeconds;
+        config.nightStartHour = nightStartHour;
+        config.nightEndHour = nightEndHour;
+        config.nightStartTime = nightStartTime.toString();
+        config.nightEndTime = nightEndTime.toString();
+        config.messageSleepStatus = messageSleepStatusTemplate;
+        config.messageThresholdReached = messageThresholdReachedTemplate;
+        config.messageThresholdLost = messageThresholdLostTemplate;
+        config.messageNightSkipped = messageNightSkippedTemplate;
+        config.messageSleepNotAllowed = messageSleepNotAllowedTemplate;
+        return config;
     }
 
     /**
@@ -310,6 +421,8 @@ public class NoNightmarePlugin extends JavaPlugin {
         }
 
         int sleepingPlayers = 0;
+        List<Player> sleepingPlayersList = new ArrayList<>();
+        Set<UUID> currentSleepingIds = new HashSet<>();
         var store = world.getEntityStore().getStore();
 
         for (Player player : players) {
@@ -343,6 +456,8 @@ public class NoNightmarePlugin extends JavaPlugin {
 
             if (isSleeping) {
                 sleepingPlayers++;
+                sleepingPlayersList.add(player);
+                currentSleepingIds.add(player.getUuid());
             }
         }
 
@@ -361,7 +476,9 @@ public class NoNightmarePlugin extends JavaPlugin {
         }
 
         if (sleepingPlayers == 0) {
-            sentNotAllowedWhileSleeping = false;
+            notifiedDaySleepers.clear();
+        } else {
+            notifiedDaySleepers.retainAll(currentSleepingIds);
         }
 
         if (isNight && (sleepingPlayers != lastSleepingPlayers || totalPlayers != lastTotalPlayers)) {
@@ -371,9 +488,18 @@ public class NoNightmarePlugin extends JavaPlugin {
         }
 
         if (!isNight && sleepingPlayers > 0) {
-            if (!sentNotAllowedWhileSleeping) {
-                sendSleepNotAllowedMessage(world);
-                sentNotAllowedWhileSleeping = true;
+            if (System.currentTimeMillis() < ignoreDaySleepUntilMillis) {
+                lastSleepingPlayers = sleepingPlayers;
+                lastTotalPlayers = totalPlayers;
+                thresholdReachedAtMillis = 0L;
+                return;
+            }
+            for (Player player : sleepingPlayersList) {
+                UUID playerId = player.getUuid();
+                if (!notifiedDaySleepers.contains(playerId)) {
+                    sendSleepNotAllowedMessage(player);
+                    notifiedDaySleepers.add(playerId);
+                }
             }
             lastSleepingPlayers = sleepingPlayers;
             lastTotalPlayers = totalPlayers;
@@ -406,6 +532,7 @@ public class NoNightmarePlugin extends JavaPlugin {
                     sendNightSkippedMessage(world, sleepingPlayers, totalPlayers, sleepPercentage);
                     getLogger().at(Level.INFO).log("Noche omitida por sueño suficiente.");
                     lastCheckWasSleeping = false;
+                    ignoreDaySleepUntilMillis = System.currentTimeMillis() + 2000L;
                     thresholdReachedAtMillis = 0L;
                 } catch (Exception e) {
                     getLogger().at(Level.WARNING).log("Failed to skip night: " + e.getMessage());
@@ -495,9 +622,9 @@ public class NoNightmarePlugin extends JavaPlugin {
         world.sendMessage(buildMessageFromTemplate(messageThresholdLostTemplate, vars));
     }
 
-    private void sendSleepNotAllowedMessage(World world) {
+    private void sendSleepNotAllowedMessage(Player player) {
         Map<String, String> vars = baseVariables(0, 0, 0.0f);
-        world.sendMessage(buildMessageFromTemplate(messageSleepNotAllowedTemplate, vars));
+        player.sendMessage(buildMessageFromTemplate(messageSleepNotAllowedTemplate, vars));
     }
 
     private void sendNightSkippedMessage(World world, int sleepingPlayers, int totalPlayers, float sleepPercentage) {
